@@ -1,38 +1,282 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Panel de tutor y jugadores — Tochito Pro">
+  <meta name="theme-color" content="#32D4B6">
+  <meta name="background-color" content="#0B101E">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 
-  <!-- iOS meta tags & icons -->
+  <!-- PWA -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="Tochito Pro">
+  <link id="pwa-manifest" rel="manifest" href="manifest.json">
+
+  <!-- iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="user_tp">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="Tochito Pro">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/Icon-192.png">
 
-  <title>user_tp</title>
-  <link rel="manifest" href="manifest.json">
+  <title>Tochito Pro — Tutor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:ital,wght@0,400;0,700;1,400&family=Outfit:wght@400;500;600;700&family=Public+Sans:wght@400;600;700;900&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0B101E;
+      touch-action: none;
+    }
+  </style>
+  <script>
+    // Sellado por tool/stamp_pwa_build.py (tokens %%PWA_*%%). Si queda sin sellar, fallback.
+    window.__PWA_BUILD_ID__ = '%%PWA_BUILD_ID%%';
+    window.__PWA_APP_VERSION__ = '%%PWA_APP_VERSION%%';
+    window.__PWA_BUILT_AT__ = '%%PWA_BUILT_AT%%';
+    (function () {
+      var id = window.__PWA_BUILD_ID__;
+      if (!id || String(id).indexOf('%%PWA_') !== -1) {
+        window.__PWA_BUILD_ID__ = 'runtime-' + Date.now();
+      }
+    })();
+  </script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    (function () {
+      var PWA_STORAGE_KEY = 'tochito_pwa_build_id';
+      var reloading = false;
+
+      function getBaseHref() {
+        var base = document.querySelector('base');
+        var href = (base && base.getAttribute('href')) || '/';
+        if (!href.endsWith('/')) href += '/';
+        return href;
+      }
+
+      function assetUrl(path) {
+        return getBaseHref() + path.replace(/^\//, '');
+      }
+
+      function sessionFlag(key) {
+        try {
+          return sessionStorage.getItem(key);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function setSessionFlag(key) {
+        try {
+          sessionStorage.setItem(key, '1');
+        } catch (e) {}
+      }
+
+      function applyBuildId(buildId) {
+        if (!buildId) return;
+        window.__PWA_BUILD_ID__ = buildId;
+        try {
+          localStorage.setItem(PWA_STORAGE_KEY, buildId);
+        } catch (e) {}
+        var manifest = document.getElementById('pwa-manifest');
+        if (manifest) {
+          manifest.setAttribute('href', 'manifest.json?v=' + encodeURIComponent(buildId));
+        }
+      }
+
+      function purgeCachesAndReload() {
+        if (reloading) return;
+        reloading = true;
+
+        var reloadKey = 'pwa_reload_' + (window.__PWA_BUILD_ID__ || 'unknown');
+        if (sessionFlag(reloadKey)) {
+          reloading = false;
+          return;
+        }
+        setSessionFlag(reloadKey);
+
+        var tasks = [];
+        if ('caches' in window) {
+          tasks.push(
+            caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (key) {
+                return caches.delete(key);
+              }));
+            })
+          );
+        }
+
+        Promise.all(tasks).finally(function () {
+          window.location.reload();
+        });
+      }
+
+      function checkRemoteVersion() {
+        var current = window.__PWA_BUILD_ID__;
+        if (!current || String(current).indexOf('runtime-') === 0) return;
+
+        return fetch(assetUrl('version.json') + '?t=' + Date.now(), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        }).then(function (response) {
+          if (!response.ok) return;
+          return response.json();
+        }).then(function (data) {
+          if (!data || !data.buildId) return;
+          var remote = String(data.buildId);
+          if (remote === current) return;
+          applyBuildId(remote);
+          purgeCachesAndReload();
+        }).catch(function () {});
+      }
+
+      window.__checkPwaUpdate = checkRemoteVersion;
+
+      (function bootstrapPwaVersion() {
+        var current = window.__PWA_BUILD_ID__;
+        if (!current || String(current).indexOf('runtime-') === 0) {
+          // Intenta leer version.json del servidor si el HTML no fue sellado.
+          fetch(assetUrl('version.json') + '?t=' + Date.now(), { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+              if (data && data.buildId) applyBuildId(String(data.buildId));
+            })
+            .catch(function () {});
+          return;
+        }
+
+        var stored = null;
+        try {
+          stored = localStorage.getItem(PWA_STORAGE_KEY);
+        } catch (e) {}
+
+        if (stored && stored !== current) {
+          applyBuildId(current);
+          purgeCachesAndReload();
+          return;
+        }
+
+        applyBuildId(current);
+      })();
+
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) checkRemoteVersion();
+      });
+
+      setInterval(checkRemoteVersion, 5 * 60 * 1000);
+      setTimeout(checkRemoteVersion, 60000);
+    })();
+  </script>
+
+  <!-- Flutter loader: SIN service worker de Flutter (evita conflicto con FCM). -->
+  <script>
+    {{flutter_js}}
+    {{flutter_build_config}}
+  </script>
+  <script>
+    (function () {
+      function swUrl(reg) {
+        var w = reg.active || reg.waiting || reg.installing;
+        return (w && w.scriptURL) || '';
+      }
+
+      function isFlutter(reg) {
+        return swUrl(reg).indexOf('flutter_service_worker') !== -1;
+      }
+
+      function isFcm(reg) {
+        return swUrl(reg).indexOf('firebase-messaging-sw.js') !== -1;
+      }
+
+      function getBaseHref() {
+        var base = document.querySelector('base');
+        var href = (base && base.getAttribute('href')) || '/';
+        if (!href.endsWith('/')) href += '/';
+        return href;
+      }
+
+      function assetUrl(path) {
+        return getBaseHref() + path.replace(/^\//, '');
+      }
+
+      function unregisterFlutterWorkers() {
+        if (!('serviceWorker' in navigator)) return Promise.resolve();
+        return navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.filter(isFlutter).map(function (r) {
+            return r.unregister();
+          }));
+        });
+      }
+
+      function setupFcmServiceWorker() {
+        if (!('serviceWorker' in navigator)) return Promise.resolve();
+        if (window.__fcmSwSetupInFlight) return window.__fcmSwSetupInFlight;
+
+        var buildId = window.__PWA_BUILD_ID__ || String(Date.now());
+        var swUrlWithV = assetUrl('firebase-messaging-sw.js') +
+          '?v=' + encodeURIComponent(buildId);
+
+        window.__fcmSwSetupInFlight = navigator.serviceWorker.getRegistrations()
+          .then(function (regs) {
+            var fcmRegs = regs.filter(isFcm);
+            var matching = fcmRegs.find(function (reg) {
+              return swUrl(reg).indexOf(buildId) !== -1;
+            });
+            if (matching) return matching;
+
+            return Promise.all(fcmRegs.map(function (r) {
+              return r.unregister();
+            })).then(function () {
+              return navigator.serviceWorker.register(swUrlWithV, {
+                scope: getBaseHref(),
+                updateViaCache: 'none',
+              });
+            });
+          })
+          .catch(function (err) {
+            console.warn('[FCM] setup SW:', err);
+          })
+          .finally(function () {
+            window.__fcmSwSetupInFlight = null;
+          });
+
+        return window.__fcmSwSetupInFlight;
+      }
+
+      // 1) Quitar SW Flutter viejos  2) Arrancar app SIN SW Flutter  3) Registrar solo FCM
+      unregisterFlutterWorkers().finally(function () {
+        _flutter.loader.load({
+          // Desactiva el service worker de Flutter (caché offline).
+          // Las notificaciones usan firebase-messaging-sw.js.
+          serviceWorkerSettings: null,
+          onEntrypointLoaded: function (engineInitializer) {
+            engineInitializer.initializeEngine().then(function (appRunner) {
+              appRunner.runApp();
+            });
+          },
+        });
+
+        // FCM después de que Flutter ya no intente tomar el SW.
+        setTimeout(setupFcmServiceWorker, 1500);
+      });
+    })();
+  </script>
 </body>
 </html>

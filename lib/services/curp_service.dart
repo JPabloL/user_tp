@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -23,16 +24,24 @@ class CurpService {
       throw Exception('El formato de la CURP es incorrecto. Revisa los caracteres.');
     }
 
+    await _checkLocalRestrictions(cleanCurp);
+
     final localRes = await _checkLocalStatus(cleanCurp);
     final localStatus = localRes['status']?.toString() ?? '';
 
     if (localStatus == 'exists_as_player') {
+      final data = localRes['data'] as Map<String, dynamic>? ?? {};
+      final tutorObj = data['tutor'] as Map<String, dynamic>? ?? {};
+      final tutorName = tutorObj['name'] ?? tutorObj['alias'] ?? localRes['tutorName'] ?? 'Otro tutor';
+
       return {
         'source': 'player_exists',
-        'data': localRes['data'],
+        'data': data,
         'message': 'Este jugador ya está registrado.',
         'playerId': localRes['playerId'],
-        'tutorName': localRes['tutorName'],
+        'tutorName': tutorName,
+        'recoveryMode': localRes['recoveryMode'],
+        'accountType': localRes['accountType'],
       };
     }
 
@@ -58,6 +67,44 @@ class CurpService {
     return re.hasMatch(curp);
   }
 
+  Future<void> _checkLocalRestrictions(String curp) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 1. Revisar bloqueo por mantenimiento (1 hora)
+    final lockoutTimestamp = prefs.getInt('curp_api_lockout_until') ?? 0;
+    if (lockoutTimestamp > 0) {
+      final lockoutDate = DateTime.fromMillisecondsSinceEpoch(lockoutTimestamp);
+      if (DateTime.now().isBefore(lockoutDate)) {
+        final diffMinutes = lockoutDate.difference(DateTime.now()).inMinutes;
+        throw Exception('Servicio de validación en mantenimiento. Intenta de nuevo en $diffMinutes minutos.');
+      } else {
+        await prefs.remove('curp_api_lockout_until');
+      }
+    }
+
+    // 2. Revisar si la CURP ya fue marcada como inválida
+    final invalidCurps = prefs.getStringList('invalid_curps_list') ?? [];
+    if (invalidCurps.contains(curp)) {
+      throw Exception('CURP no encontrada en los registros oficiales de RENAPO.');
+    }
+  }
+
+  Future<void> _registerInvalidCurp(String curp) async {
+    final prefs = await SharedPreferences.getInstance();
+    final invalidCurps = prefs.getStringList('invalid_curps_list') ?? [];
+    if (!invalidCurps.contains(curp)) {
+      invalidCurps.add(curp);
+      await prefs.setStringList('invalid_curps_list', invalidCurps);
+    }
+  }
+
+  Future<void> _registerApiLockout() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Bloquear por 1 hora
+    final lockoutUntil = DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch;
+    await prefs.setInt('curp_api_lockout_until', lockoutUntil);
+  }
+
   Future<Map<String, dynamic>> _checkLocalStatus(String curp) async {
     final uri = Uri.parse('${api.apiCdb}/check-curp-status/$curp');
     final response = await http.get(uri);
@@ -71,10 +118,49 @@ class CurpService {
     final uri = Uri.parse('$_apiExternalUrl?token=$token&curp=$curpToSend');
 
     final response = await http.get(uri);
-    final raw = _decode(response);
+    print('HTTP ${response.statusCode} - ${response.body}');
+    
+    // No usamos _decode aquí porque la API puede regresar 400 con el JSON del error
+    Map<String, dynamic> raw = {};
+    try {
+      raw = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {}
+    
+    print('RAW RENAPO RESPONSE: $raw');
 
-    if (raw['codigo_error'] != null || raw['error'] != null) {
-      throw Exception('CURP no encontrada en RENAPO.');
+    final codigoError = (raw['codigo_error'] ?? raw['code_error'])?.toString() ?? '';
+    final errorMsg = (raw['error_message'] ?? (raw['error'] is String ? raw['error'] : ''))?.toString() ?? '';
+
+    if (codigoError.isNotEmpty && codigoError != '0' && codigoError != '00' && codigoError != 'false') {
+      String userFriendlyMessage = 'Error consultando CURP ($codigoError)';
+      
+      switch (codigoError) {
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+          // Errores internos de cuenta/token de la API (bloqueado, agotado, etc.)
+          _registerApiLockout();
+          userFriendlyMessage = 'Servicio en mantenimiento, intente más tarde.';
+          break;
+        case '101':
+          _registerInvalidCurp(curp);
+          userFriendlyMessage = 'La estructura de la CURP es inválida.';
+          break;
+        case '200':
+          _registerApiLockout();
+          userFriendlyMessage = 'Error de conexión con RENAPO, intente más tarde.';
+          break;
+        case '300':
+          _registerInvalidCurp(curp);
+          userFriendlyMessage = 'CURP no encontrada en los registros oficiales de RENAPO.';
+          break;
+        default:
+          if (errorMsg.isNotEmpty && errorMsg != 'false' && errorMsg.toLowerCase() != 'null') {
+             userFriendlyMessage = errorMsg;
+          }
+      }
+      throw Exception(userFriendlyMessage);
     }
 
     final rawData = (raw['response'] as Map<String, dynamic>?) ?? raw;
@@ -96,12 +182,16 @@ class CurpService {
     };
     final uri = Uri.parse('${api.apiCdb}/save-curp-cache');
     try {
-      await http.post(
+      final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(payload),
       );
-    } catch (_) {}
+      print('save-curp-cache response status: ${response.statusCode}');
+      print('save-curp-cache response body: ${response.body}');
+    } catch (e) {
+      print('Error saving to cache: $e');
+    }
   }
 
   Map<String, dynamic> _decode(http.Response response) {

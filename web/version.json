@@ -1,0 +1,5 @@
+{
+  "buildId": "%%PWA_BUILD_ID%%",
+  "appVersion": "%%PWA_APP_VERSION%%",
+  "builtAt": "%%PWA_BUILT_AT%%"
+}
